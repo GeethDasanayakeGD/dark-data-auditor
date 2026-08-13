@@ -1,0 +1,10 @@
+flask
+flask-cors
+pandas
+numpy
+scikit-learn
+requests
+boto3
+python-dotenv
+gunicorn
+flask-cors
