@@ -7,9 +7,8 @@ import {
 } from 'recharts';
 import './App.css';
 
-// These are the addresses of your Flask backend endpoints.
-// The server must be running on port 5000 for any of this to work.
-const BASE_URL = 'http://localhost:5000';
+// Render Cloud Backend API URL
+const BASE_URL = 'https://dark-data-auditor-api.onrender.com';
 const METRICS_URL = `${BASE_URL}/api/dashboard-metrics`;
 const GENERATE_URL = `${BASE_URL}/api/generate-dataset`;
 const UPLOAD_URL = `${BASE_URL}/api/upload-dataset`;
@@ -44,7 +43,7 @@ function App() {
       .catch((err) => {
         console.error(err);
         setError(
-          'Could not reach the backend. Make sure your Flask server is running on http://localhost:5000'
+          'Could not reach the backend API. Make sure your Render backend service is live.'
         );
         setLoading(false);
       });
@@ -516,109 +515,109 @@ function App() {
           {datasetControls}
 
           <section className="stats-grid">
-        <StatCard label="Total Files" value={aggregates.total_files} />
-        <StatCard label="Dark Data Files" value={aggregates.dark_files_count} highlight="warning" />
-        <StatCard label="Active Files" value={aggregates.active_files_count} highlight="good" />
-        <StatCard
-          label="Current Carbon Footprint"
-          value={`${(aggregates.current_footprint_kg * 1000).toFixed(2)} g CO₂`}
-        />
-        <StatCard
-          label="Prevented Emissions"
-          value={`${(aggregates.prevented_emissions_kg * 1000).toFixed(2)} g CO₂`}
-          highlight="good"
-        />
-        <StatCard
-          label="Estimated Monthly Savings"
-          value={`$${aggregates.estimated_monthly_roi_usd}`}
-          highlight="good"
-        />
-      </section>
+            <StatCard label="Total Files" value={aggregates.total_files} />
+            <StatCard label="Dark Data Files" value={aggregates.dark_files_count} highlight="warning" />
+            <StatCard label="Active Files" value={aggregates.active_files_count} highlight="good" />
+            <StatCard
+              label="Current Carbon Footprint"
+              value={`${(aggregates.current_footprint_kg * 1000).toFixed(2)} g CO₂`}
+            />
+            <StatCard
+              label="Prevented Emissions"
+              value={`${(aggregates.prevented_emissions_kg * 1000).toFixed(2)} g CO₂`}
+              highlight="good"
+            />
+            <StatCard
+              label="Estimated Monthly Savings"
+              value={`$${aggregates.estimated_monthly_roi_usd}`}
+              highlight="good"
+            />
+          </section>
 
-      <section className="charts-grid">
-        <div className="chart-card">
-          <h2>Active vs Dark Data</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={pieData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                label
-              >
-                {pieData.map((entry, index) => (
-                  <Cell key={entry.name} fill={PIE_COLORS[index]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+          <section className="charts-grid">
+            <div className="chart-card">
+              <h2>Active vs Dark Data</h2>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    label
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={entry.name} fill={PIE_COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
 
-        <div className="chart-card">
-          <h2>Carbon Footprint by File Type (g CO₂)</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={barData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="type" stroke="#94a3b8" />
-              <YAxis stroke="#94a3b8" />
-              <Tooltip />
-              <Bar dataKey="carbon" fill="#6366f1" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+            <div className="chart-card">
+              <h2>Carbon Footprint by File Type (g CO₂)</h2>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={barData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="type" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip />
+                  <Bar dataKey="carbon" fill="#6366f1" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
 
-      <section className="table-section">
-        <h2>File Details</h2>
-        {tableTruncated && (
-          <p className="dataset-hint" style={{ marginBottom: 12 }}>
-            Showing the {MAX_TABLE_ROWS} most impactful files (flagged files first, sorted by
-            carbon footprint) out of {files.length} total. All stats above reflect every file,
-            not just what's shown here.
-          </p>
-        )}
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>File ID</th>
-                <th>Type</th>
-                <th>Size (MB)</th>
-                <th>Days Old</th>
-                <th>Last Accessed (days)</th>
-                <th>Accesses (30d)</th>
-                <th>Carbon (g)</th>
-                <th>AI Confidence</th>
-                <th>Recommended Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayedFiles.map((file) => (
-                <tr key={file.file_id}>
-                  <td>{file.file_id}</td>
-                  <td>{file.file_type}</td>
-                  <td>{file.file_size_mb}</td>
-                  <td>{file.days_since_creation}</td>
-                  <td>{file.days_since_last_accessed}</td>
-                  <td>{file.access_count_30d}</td>
-                  <td>{(file.carbon_kg * 1000).toFixed(3)}</td>
-                  <td>{file.confidence_percent}%</td>
-                  <td>
-                    <span className={`badge ${badgeClass(file.automated_action)}`}>
-                      {file.automated_action}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <section className="table-section">
+            <h2>File Details</h2>
+            {tableTruncated && (
+              <p className="dataset-hint" style={{ marginBottom: 12 }}>
+                Showing the {MAX_TABLE_ROWS} most impactful files (flagged files first, sorted by
+                carbon footprint) out of {files.length} total. All stats above reflect every file,
+                not just what's shown here.
+              </p>
+            )}
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>File ID</th>
+                    <th>Type</th>
+                    <th>Size (MB)</th>
+                    <th>Days Old</th>
+                    <th>Last Accessed (days)</th>
+                    <th>Accesses (30d)</th>
+                    <th>Carbon (g)</th>
+                    <th>AI Confidence</th>
+                    <th>Recommended Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedFiles.map((file) => (
+                    <tr key={file.file_id}>
+                      <td>{file.file_id}</td>
+                      <td>{file.file_type}</td>
+                      <td>{file.file_size_mb}</td>
+                      <td>{file.days_since_creation}</td>
+                      <td>{file.days_since_last_accessed}</td>
+                      <td>{file.access_count_30d}</td>
+                      <td>{(file.carbon_kg * 1000).toFixed(3)}</td>
+                      <td>{file.confidence_percent}%</td>
+                      <td>
+                        <span className={`badge ${badgeClass(file.automated_action)}`}>
+                          {file.automated_action}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </div>
