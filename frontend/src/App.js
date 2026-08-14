@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
@@ -21,15 +21,22 @@ function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [actionStatus, setActionStatus] = useState(null); // small status message under the buttons
-  const [busy, setBusy] = useState(false); // disables buttons while generating/uploading/analyzing
+  const [actionStatus, setActionStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
-  const [activeTab, setActiveTab] = useState('automation'); // 'automation' or 'research'
+  const [activeTab, setActiveTab] = useState('automation');
   const [benchmarkResults, setBenchmarkResults] = useState(null);
   const [benchmarkRunning, setBenchmarkRunning] = useState(false);
   const [benchmarkError, setBenchmarkError] = useState(null);
-  const fileInputRef = React.useRef(null);
-  const folderInputRef = React.useRef(null);
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute('webkitdirectory', '');
+      folderInputRef.current.setAttribute('directory', '');
+    }
+  }, []);
 
   const fetchMetrics = (anonymize = privacyMode) => {
     setLoading(true);
@@ -42,9 +49,7 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setError(
-          'Could not reach the backend API. Make sure your Render backend service is live.'
-        );
+        setError('Could not reach the backend API. Make sure your Render backend service is live.');
         setLoading(false);
       });
   };
@@ -65,7 +70,7 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setActionStatus('❌ Failed to generate a dataset. Check the backend terminal for errors.');
+        setActionStatus('❌ Failed to generate a dataset.');
       })
       .finally(() => setBusy(false));
   };
@@ -74,81 +79,66 @@ function App() {
     fileInputRef.current.click();
   };
 
-  // Turns a filename like "report.final.docx" into ".docx"
   const getExtension = (filename) => {
+    if (!filename) return '.unknown';
     const idx = filename.lastIndexOf('.');
     return idx === -1 ? '.unknown' : filename.slice(idx).toLowerCase();
   };
 
-  const MAX_SCAN_FILES = 8000; // keeps the browser responsive; raise only if your machine handles it well
+  const MAX_SCAN_FILES = 5000;
 
-  // Shared by both "Scan Real Files/Folder" and "Upload" (when given non-CSV files):
-  // turns a raw browser FileList into a metadata CSV, processing in small batches
-  // so large selections don't freeze the tab.
+  // Clean string safely for CSV row
+  const cleanStr = (val) => String(val || '').replace(/["',\n\r]/g, '_');
+
   const buildCsvFromRealFiles = async (rawFileList, labelPrefix) => {
-    let fileList = rawFileList;
-    let capped = false;
+    let fileList = Array.from(rawFileList);
     if (fileList.length > MAX_SCAN_FILES) {
       fileList = fileList.slice(0, MAX_SCAN_FILES);
-      capped = true;
     }
 
     const now = Date.now();
     const rows = [['file_id', 'file_type', 'file_size_mb', 'days_since_creation', 'days_since_last_accessed', 'access_count_30d']];
 
-    const BATCH_SIZE = 500;
-    for (let start = 0; start < fileList.length; start += BATCH_SIZE) {
-      const batch = fileList.slice(start, start + BATCH_SIZE);
-      batch.forEach((file, i) => {
-        const index = start + i;
-        const relativePath = file.webkitRelativePath || file.name;
-        const sizeMb = (file.size / (1024 * 1024)).toFixed(3);
-        const daysSinceModified = Math.max(0, Math.floor((now - file.lastModified) / (1000 * 60 * 60 * 24)));
+    fileList.forEach((file, index) => {
+      const relPath = cleanStr(file.webkitRelativePath || file.name || `file_${index}`);
+      const ext = cleanStr(getExtension(file.name));
+      const sizeMb = Number(((file.size || 0) / (1024 * 1024)).toFixed(3));
+      const lastMod = file.lastModified || now;
+      const daysOld = Math.max(0, Math.floor((now - lastMod) / (1000 * 60 * 60 * 24)));
 
-        rows.push([
-          `${labelPrefix}_${index + 1}_${relativePath.replace(/[,"]/g, '_')}`,
-          getExtension(file.name),
-          sizeMb,
-          daysSinceModified,
-          daysSinceModified,
-          0,
-        ]);
-      });
-
-      setActionStatus(`Processing files... ${Math.min(start + BATCH_SIZE, fileList.length)} / ${fileList.length}`);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-
-    if (capped) {
-      setActionStatus(`⚠️ More than ${MAX_SCAN_FILES} files selected - only the first ${MAX_SCAN_FILES} were processed.`);
-    }
+      rows.push([
+        `${labelPrefix}_${index + 1}_${relPath}`,
+        ext,
+        sizeMb,
+        daysOld,
+        daysOld,
+        0
+      ]);
+    });
 
     const csvContent = rows.map((row) => row.join(',')).join('\n');
     const csvBlob = new Blob([csvContent], { type: 'text/csv' });
     return { csvFile: new File([csvBlob], 'scanned_files.csv', { type: 'text/csv' }), count: fileList.length };
   };
 
-  // Shared upload + auto-retrain + refresh pipeline
   const uploadCsvAndRetrain = (csvFile, successPrefix) => {
     const formData = new FormData();
     formData.append('file', csvFile);
 
     axios
       .post(UPLOAD_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
-      .then((res) => {
-        setActionStatus(`✅ ${successPrefix} Retraining the AI on this data...`);
+      .then(() => {
+        setActionStatus(`✅ ${successPrefix} Retraining AI model...`);
         return axios.post(RETRAIN_URL);
       })
       .then((res) => {
-        setActionStatus(
-          `✅ Done. Model accuracy on this data: ${res.data.accuracy_percent}%. Refreshing dashboard...`
-        );
+        setActionStatus(`✅ Done. Model accuracy: ${res.data.accuracy_percent}%. Refreshing dashboard...`);
         fetchMetrics();
       })
       .catch((err) => {
         console.error(err);
-        const message = err.response?.data?.error || 'Upload or retraining failed.';
-        setActionStatus(`❌ ${message}`);
+        const detail = err.response?.data?.error || err.message || 'Upload or retraining failed.';
+        setActionStatus(`❌ ${detail}`);
       })
       .finally(() => setBusy(false));
   };
@@ -159,9 +149,6 @@ function App() {
 
     setBusy(true);
 
-    // If exactly one file was chosen and it's already a formatted metadata CSV,
-    // upload it directly - this is the "advanced" path for people who already
-    // have structured data.
     if (selectedFiles.length === 1 && selectedFiles[0].name.toLowerCase().endsWith('.csv')) {
       setActionStatus(`Uploading "${selectedFiles[0].name}"...`);
       uploadCsvAndRetrain(selectedFiles[0], `Uploaded "${selectedFiles[0].name}".`);
@@ -169,8 +156,6 @@ function App() {
       return;
     }
 
-    // Otherwise, treat whatever was selected as real files - build a dataset
-    // from their real size/type/date automatically, same as folder scanning.
     setActionStatus(`Reading ${selectedFiles.length} file(s)...`);
     const { csvFile, count } = await buildCsvFromRealFiles(selectedFiles, 'UPLOAD');
     setActionStatus(`Uploading ${count} file(s)...`);
@@ -187,29 +172,25 @@ function App() {
     if (fileList.length === 0) return;
 
     setBusy(true);
-    setActionStatus(`Scanning ${fileList.length} real files from your folder...`);
+    setActionStatus(`Scanning ${fileList.length} files from folder...`);
     const { csvFile, count } = await buildCsvFromRealFiles(fileList, 'SCAN');
     setActionStatus(`Uploading ${count} scanned files...`);
-    uploadCsvAndRetrain(csvFile, `Scanned and analyzed ${count} real files.`);
+    uploadCsvAndRetrain(csvFile, `Scanned ${count} real files.`);
     event.target.value = '';
   };
 
   const handleRetrain = () => {
     setBusy(true);
-    setActionStatus('Retraining the AI model on the current dataset...');
+    setActionStatus('Retraining the AI model...');
     axios
       .post(RETRAIN_URL)
       .then((res) => {
-        setActionStatus(
-          `✅ Model retrained. Validation accuracy: ${res.data.accuracy_percent}% ` +
-          `(trained on ${res.data.training_rows} rows, tested on ${res.data.test_rows} rows). Refreshing results...`
-        );
+        setActionStatus(`✅ Model retrained. Accuracy: ${res.data.accuracy_percent}%. Refreshing...`);
         fetchMetrics();
       })
       .catch((err) => {
         console.error(err);
-        const message = err.response?.data?.error || 'Retraining failed.';
-        setActionStatus(`❌ ${message}`);
+        setActionStatus(`❌ ${err.response?.data?.error || 'Retraining failed.'}`);
       })
       .finally(() => setBusy(false));
   };
@@ -220,38 +201,32 @@ function App() {
     axios
       .post(MIGRATE_URL)
       .then((res) => {
-        setActionStatus(
-          `✅ ${res.data.message} Real carbon prevented: ${(res.data.carbon_prevented_kg * 1000).toFixed(2)} g CO₂. Refreshing...`
-        );
+        setActionStatus(`✅ ${res.data.message} Carbon prevented: ${(res.data.carbon_prevented_kg * 1000).toFixed(2)} g CO₂.`);
         fetchMetrics();
       })
       .catch((err) => {
         console.error(err);
-        const message = err.response?.data?.error || 'Migration failed.';
-        setActionStatus(`❌ ${message}`);
+        setActionStatus(`❌ ${err.response?.data?.error || 'Migration failed.'}`);
       })
       .finally(() => setBusy(false));
   };
 
   const handleAwsConnect = () => {
     setBusy(true);
-    setActionStatus('Connecting to your AWS S3 bucket...');
+    setActionStatus('Connecting to AWS S3...');
     axios
       .post(AWS_CONNECT_URL)
       .then((res) => {
-        setActionStatus(`✅ ${res.data.message} Retraining the AI on this real cloud data...`);
+        setActionStatus(`✅ ${res.data.message} Retraining model...`);
         return axios.post(RETRAIN_URL);
       })
       .then((res) => {
-        setActionStatus(
-          `✅ Connected and retrained. Model accuracy: ${res.data.accuracy_percent}%. Refreshing dashboard...`
-        );
+        setActionStatus(`✅ Connected & Retrained. Accuracy: ${res.data.accuracy_percent}%.`);
         fetchMetrics();
       })
       .catch((err) => {
         console.error(err);
-        const message = err.response?.data?.error || 'Could not connect to AWS.';
-        setActionStatus(`❌ ${message}`);
+        setActionStatus(`❌ ${err.response?.data?.error || 'AWS Connection failed.'}`);
       })
       .finally(() => setBusy(false));
   };
@@ -267,88 +242,36 @@ function App() {
     setBenchmarkError(null);
     axios
       .post(BENCHMARK_URL, { num_samples: 800 })
-      .then((res) => {
-        setBenchmarkResults(res.data.results);
-      })
-      .catch((err) => {
-        console.error(err);
-        setBenchmarkError(err.response?.data?.error || 'Benchmark failed to run.');
-      })
+      .then((res) => setBenchmarkResults(res.data.results))
+      .catch((err) => setBenchmarkError(err.response?.data?.error || 'Benchmark failed.'))
       .finally(() => setBenchmarkRunning(false));
   };
 
   const datasetControls = (
     <section className="dataset-controls">
       <div className="dataset-controls-row">
-        <button className="btn btn-primary" onClick={handleGenerate} disabled={busy}>
-          🔄 Generate Sample Dataset
-        </button>
-        <button className="btn btn-secondary" onClick={handleUploadClick} disabled={busy}>
-          📁 Upload Files (any type)
-        </button>
-        <button className="btn btn-tertiary" onClick={handleRetrain} disabled={busy}>
-          🧠 Retrain Model on Current Dataset
-        </button>
-        <button className="btn btn-scan" onClick={handleFolderScanClick} disabled={busy}>
-          📂 Scan Real Files / Folder
-        </button>
-        <button className="btn btn-migrate" onClick={handleMigrate} disabled={busy}>
-          🗄️ Migrate Flagged Files to Cold Storage
-        </button>
-        <button className="btn btn-aws" onClick={handleAwsConnect} disabled={busy}>
-          ☁️ Connect to AWS S3 Bucket
-        </button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          style={{ display: 'none' }}
-          multiple
-        />
-        <input
-          type="file"
-          ref={folderInputRef}
-          onChange={handleFolderScanChange}
-          style={{ display: 'none' }}
-          webkitdirectory="true"
-          directory="true"
-          multiple
-        />
+        <button className="btn btn-primary" onClick={handleGenerate} disabled={busy}>🔄 Generate Sample Dataset</button>
+        <button className="btn btn-secondary" onClick={handleUploadClick} disabled={busy}>📁 Upload Files (any type)</button>
+        <button className="btn btn-tertiary" onClick={handleRetrain} disabled={busy}>🧠 Retrain Model on Current Dataset</button>
+        <button className="btn btn-scan" onClick={handleFolderScanClick} disabled={busy}>📂 Scan Real Files / Folder</button>
+        <button className="btn btn-migrate" onClick={handleMigrate} disabled={busy}>🗄️ Migrate Flagged Files to Cold Storage</button>
+        <button className="btn btn-aws" onClick={handleAwsConnect} disabled={busy}>☁️ Connect to AWS S3 Bucket</button>
+        <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} multiple />
+        <input type="file" ref={folderInputRef} onChange={handleFolderScanChange} style={{ display: 'none' }} multiple />
       </div>
       <label className="privacy-toggle">
         <input type="checkbox" checked={privacyMode} onChange={handlePrivacyToggle} disabled={busy} />
         🔒 Privacy Mode (anonymize file IDs)
       </label>
       {actionStatus && <p className="dataset-status">{actionStatus}</p>}
-      <p className="dataset-hint">
-        "Upload Files" accepts any regular files (photos, docs, anything) - just pick them and
-        the system builds the dataset automatically from their real size, type, and date.
-        If you already have a pre-formatted metadata CSV (file_id, file_type, file_size_mb,
-        days_since_creation, days_since_last_accessed, access_count_30d), select that single
-        file instead and it will be used directly.
-      </p>
-      <p className="dataset-hint">
-        Note: Browsers don't expose a file's true creation date or access history, so age and
-        last-accessed values are approximated from the file's last-modified date, and access
-        counts default to 0.
-      </p>
+      <p className="dataset-hint">"Upload Files" accepts any regular files (photos, docs, folders).</p>
     </section>
   );
 
   const tabNav = (
     <nav className="tab-nav">
-      <button
-        className={`tab-btn ${activeTab === 'automation' ? 'tab-active' : ''}`}
-        onClick={() => setActiveTab('automation')}
-      >
-        🤖 Automation System
-      </button>
-      <button
-        className={`tab-btn ${activeTab === 'research' ? 'tab-active' : ''}`}
-        onClick={() => setActiveTab('research')}
-      >
-        🔬 AI Research Lab
-      </button>
+      <button className={`tab-btn ${activeTab === 'automation' ? 'tab-active' : ''}`} onClick={() => setActiveTab('automation')}>🤖 Automation System</button>
+      <button className={`tab-btn ${activeTab === 'research' ? 'tab-active' : ''}`} onClick={() => setActiveTab('research')}>🔬 AI Research Lab</button>
     </nav>
   );
 
@@ -356,11 +279,6 @@ function App() {
     <section className="research-lab">
       <div className="dataset-controls">
         <h2>Multi-Model Green AI Performance Analysis</h2>
-        <p className="dataset-hint" style={{ marginBottom: 16 }}>
-          Trains 5 different classifier types on the same benchmark dataset and compares
-          accuracy, F1 score, and estimated training carbon footprint - so you can justify
-          which model is actually the best trade-off for this project.
-        </p>
         <button className="btn btn-primary" onClick={handleRunBenchmark} disabled={benchmarkRunning}>
           {benchmarkRunning ? '⏳ Running benchmark...' : '▶️ Run Model Comparison Benchmark'}
         </button>
@@ -468,31 +386,21 @@ function App() {
   }
 
   const { aggregates, files } = data;
-
-  // For large datasets, rendering every single row (thousands of them) makes the
-  // browser tab feel stuck. Instead, show the most relevant files first - anything
-  // flagged by the AI, sorted by carbon impact - capped at a manageable number.
-  // All the stat cards and charts above still reflect the FULL dataset, not just
-  // what's shown in this table.
   const MAX_TABLE_ROWS = 300;
   const sortedFiles = [...files].sort((a, b) => {
     const aDark = a.automated_action !== 'Retain Active Tier' ? 1 : 0;
     const bDark = b.automated_action !== 'Retain Active Tier' ? 1 : 0;
-    if (aDark !== bDark) return bDark - aDark; // flagged files first
-    return b.carbon_kg - a.carbon_kg; // then highest carbon impact first
+    if (aDark !== bDark) return bDark - aDark;
+    return b.carbon_kg - a.carbon_kg;
   });
   const displayedFiles = sortedFiles.slice(0, MAX_TABLE_ROWS);
-  const tableTruncated = files.length > MAX_TABLE_ROWS;
 
-  // Prepare data for the "Active vs Dark" pie chart
   const pieData = [
     { name: 'Active Files', value: aggregates.active_files_count },
     { name: 'Dark Data Files', value: aggregates.dark_files_count },
   ];
   const PIE_COLORS = ['#4ade80', '#f87171'];
 
-  // Prepare data for the "Carbon Footprint by File Type" bar chart
-  // Displayed in grams instead of kg - kg values are tiny and hard to read at this scale
   const carbonByType = {};
   files.forEach((file) => {
     const type = file.file_type || 'unknown';
@@ -519,20 +427,9 @@ function App() {
             <StatCard label="Total Files" value={aggregates.total_files} />
             <StatCard label="Dark Data Files" value={aggregates.dark_files_count} highlight="warning" />
             <StatCard label="Active Files" value={aggregates.active_files_count} highlight="good" />
-            <StatCard
-              label="Current Carbon Footprint"
-              value={`${(aggregates.current_footprint_kg * 1000).toFixed(2)} g CO₂`}
-            />
-            <StatCard
-              label="Prevented Emissions"
-              value={`${(aggregates.prevented_emissions_kg * 1000).toFixed(2)} g CO₂`}
-              highlight="good"
-            />
-            <StatCard
-              label="Estimated Monthly Savings"
-              value={`$${aggregates.estimated_monthly_roi_usd}`}
-              highlight="good"
-            />
+            <StatCard label="Current Carbon Footprint" value={`${(aggregates.current_footprint_kg * 1000).toFixed(2)} g CO₂`} />
+            <StatCard label="Prevented Emissions" value={`${(aggregates.prevented_emissions_kg * 1000).toFixed(2)} g CO₂`} highlight="good" />
+            <StatCard label="Estimated Monthly Savings" value={`$${aggregates.estimated_monthly_roi_usd}`} highlight="good" />
           </section>
 
           <section className="charts-grid">
@@ -540,15 +437,7 @@ function App() {
               <h2>Active vs Dark Data</h2>
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={90}
-                    label
-                  >
+                  <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
                     {pieData.map((entry, index) => (
                       <Cell key={entry.name} fill={PIE_COLORS[index]} />
                     ))}
@@ -575,13 +464,6 @@ function App() {
 
           <section className="table-section">
             <h2>File Details</h2>
-            {tableTruncated && (
-              <p className="dataset-hint" style={{ marginBottom: 12 }}>
-                Showing the {MAX_TABLE_ROWS} most impactful files (flagged files first, sorted by
-                carbon footprint) out of {files.length} total. All stats above reflect every file,
-                not just what's shown here.
-              </p>
-            )}
             <div className="table-wrapper">
               <table>
                 <thead>
