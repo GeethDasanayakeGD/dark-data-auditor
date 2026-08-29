@@ -7,8 +7,7 @@ import {
 } from 'recharts';
 import './App.css';
 
-// Render Cloud Backend API URL
-const BASE_URL = 'https://dark-data-auditor-api.onrender.com';
+const BASE_URL = 'http://localhost:5000';
 const METRICS_URL = `${BASE_URL}/api/dashboard-metrics`;
 const GENERATE_URL = `${BASE_URL}/api/generate-dataset`;
 const UPLOAD_URL = `${BASE_URL}/api/upload-dataset`;
@@ -16,6 +15,10 @@ const RETRAIN_URL = `${BASE_URL}/api/retrain-model`;
 const BENCHMARK_URL = `${BASE_URL}/api/run-benchmark`;
 const MIGRATE_URL = `${BASE_URL}/api/migrate-dark-files`;
 const AWS_CONNECT_URL = `${BASE_URL}/api/connect-aws-bucket`;
+const SCAN_DIR_URL = `${BASE_URL}/api/scan-local-dir`;
+const SCAN_GDRIVE_URL = `${BASE_URL}/api/scan-gdrive`;
+const CLEANUP_URL = `${BASE_URL}/api/cleanup-dark-files`;
+const DOWNLOAD_PDF_URL = `${BASE_URL}/api/download-pdf-report`;
 
 function App() {
   const [data, setData] = useState(null);
@@ -49,7 +52,7 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setError('Could not reach the backend API. Make sure your Render backend service is live.');
+        setError('Could not reach backend API. Ensure Localhost Flask Server is running.');
         setLoading(false);
       });
   };
@@ -79,16 +82,20 @@ function App() {
     fileInputRef.current.click();
   };
 
-  const getExtension = (filename) => {
+  const getCleanExtension = (filename) => {
     if (!filename) return '.unknown';
     const idx = filename.lastIndexOf('.');
-    return idx === -1 ? '.unknown' : filename.slice(idx).toLowerCase();
+    if (idx === -1 || idx === filename.length - 1) return '.unknown';
+    const ext = filename.slice(idx + 1).toLowerCase().replace(/[^a-z0-9]/g, '');
+    return ext ? `.${ext}` : '.unknown';
+  };
+
+  const sanitizeName = (str) => {
+    if (!str) return 'file';
+    return String(str).replace(/[^a-zA-Z0-9_\.\-]/g, '_');
   };
 
   const MAX_SCAN_FILES = 5000;
-
-  // Clean string safely for CSV row
-  const cleanStr = (val) => String(val || '').replace(/["',\n\r]/g, '_');
 
   const buildCsvFromRealFiles = async (rawFileList, labelPrefix) => {
     let fileList = Array.from(rawFileList);
@@ -100,15 +107,19 @@ function App() {
     const rows = [['file_id', 'file_type', 'file_size_mb', 'days_since_creation', 'days_since_last_accessed', 'access_count_30d']];
 
     fileList.forEach((file, index) => {
-      const relPath = cleanStr(file.webkitRelativePath || file.name || `file_${index}`);
-      const ext = cleanStr(getExtension(file.name));
-      const sizeMb = Number(((file.size || 0) / (1024 * 1024)).toFixed(3));
+      const rawPath = file.webkitRelativePath || file.name || `file_${index + 1}`;
+      const safeId = `${labelPrefix}_${index + 1}_${sanitizeName(rawPath)}`;
+      const safeType = getCleanExtension(file.name);
+
+      const rawMb = (file.size || 0) / (1024 * 1024);
+      const sizeMb = rawMb < 0.001 ? 0.001 : Number(rawMb.toFixed(3));
+
       const lastMod = file.lastModified || now;
       const daysOld = Math.max(0, Math.floor((now - lastMod) / (1000 * 60 * 60 * 24)));
 
       rows.push([
-        `${labelPrefix}_${index + 1}_${relPath}`,
-        ext,
+        safeId,
+        safeType,
         sizeMb,
         daysOld,
         daysOld,
@@ -132,7 +143,7 @@ function App() {
         return axios.post(RETRAIN_URL);
       })
       .then((res) => {
-        setActionStatus(`✅ Done. Model accuracy: ${res.data.accuracy_percent}%. Refreshing dashboard...`);
+        setActionStatus(`✅ Done! Model accuracy: ${res.data.accuracy_percent}%. Refreshing dashboard...`);
         fetchMetrics();
       })
       .catch((err) => {
@@ -150,15 +161,15 @@ function App() {
     setBusy(true);
 
     if (selectedFiles.length === 1 && selectedFiles[0].name.toLowerCase().endsWith('.csv')) {
-      setActionStatus(`Uploading "${selectedFiles[0].name}"...`);
+      setActionStatus(`Uploading CSV "${selectedFiles[0].name}"...`);
       uploadCsvAndRetrain(selectedFiles[0], `Uploaded "${selectedFiles[0].name}".`);
       event.target.value = '';
       return;
     }
 
-    setActionStatus(`Reading ${selectedFiles.length} file(s)...`);
-    const { csvFile, count } = await buildCsvFromRealFiles(selectedFiles, 'UPLOAD');
-    setActionStatus(`Uploading ${count} file(s)...`);
+    setActionStatus(`Processing ${selectedFiles.length} file(s)...`);
+    const { csvFile, count } = await buildCsvFromRealFiles(selectedFiles, 'FILE');
+    setActionStatus(`Uploading metadata for ${count} file(s)...`);
     uploadCsvAndRetrain(csvFile, `Analyzed ${count} uploaded file(s).`);
     event.target.value = '';
   };
@@ -173,10 +184,58 @@ function App() {
 
     setBusy(true);
     setActionStatus(`Scanning ${fileList.length} files from folder...`);
-    const { csvFile, count } = await buildCsvFromRealFiles(fileList, 'SCAN');
-    setActionStatus(`Uploading ${count} scanned files...`);
+    const { csvFile, count } = await buildCsvFromRealFiles(fileList, 'FOLDER');
+    setActionStatus(`Uploading metadata for ${count} scanned files...`);
     uploadCsvAndRetrain(csvFile, `Scanned ${count} real files.`);
     event.target.value = '';
+  };
+
+  const handleScanLocalPath = () => {
+    const path = prompt("Enter full folder/drive path (e.g., C:\\Users\\Name\\Documents or D:\\Data):");
+    if (!path) return;
+
+    setBusy(true);
+    setActionStatus(`Scanning directory: ${path}...`);
+
+    axios
+      .post(SCAN_DIR_URL, { target_path: path })
+      .then((res) => {
+        setActionStatus(`✅ ${res.data.message} Retraining AI model...`);
+        return axios.post(RETRAIN_URL);
+      })
+      .then((res) => {
+        setActionStatus(`✅ Drive Scanned & Model Retrained. Accuracy: ${res.data.accuracy_percent}%.`);
+        fetchMetrics();
+      })
+      .catch((err) => {
+        console.error(err);
+        setActionStatus(`❌ ${err.response?.data?.error || 'Failed to scan local path.'}`);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  const handleScanGDrive = () => {
+    const url = prompt("Enter Google Drive folder or file shareable link:");
+    if (!url) return;
+
+    setBusy(true);
+    setActionStatus('Scanning Google Drive link...');
+
+    axios
+      .post(SCAN_GDRIVE_URL, { drive_url: url })
+      .then((res) => {
+        setActionStatus(`✅ ${res.data.message} Retraining AI model...`);
+        return axios.post(RETRAIN_URL);
+      })
+      .then((res) => {
+        setActionStatus(`✅ Google Drive Scanned & Model Retrained. Accuracy: ${res.data.accuracy_percent}%.`);
+        fetchMetrics();
+      })
+      .catch((err) => {
+        console.error(err);
+        setActionStatus(`❌ ${err.response?.data?.error || 'Failed to scan Google Drive link.'}`);
+      })
+      .finally(() => setBusy(false));
   };
 
   const handleRetrain = () => {
@@ -231,6 +290,55 @@ function App() {
       .finally(() => setBusy(false));
   };
 
+  const handleAutomatedCleanup = () => {
+    if (!window.confirm("Are you sure you want to run automated cleanup? Flagged dark files will be removed.")) return;
+
+    setBusy(true);
+    setActionStatus('🧹 Running automated data cleanup...');
+
+    axios
+      .post(CLEANUP_URL)
+      .then((res) => {
+        setActionStatus(`✅ ${res.data.message} (${res.data.dataset_files_removed} files removed). Retraining model...`);
+        return axios.post(RETRAIN_URL);
+      })
+      .then((res) => {
+        setActionStatus(`✅ Cleanup complete & model retrained. Refreshing metrics...`);
+        fetchMetrics();
+      })
+      .catch((err) => {
+        console.error(err);
+        setActionStatus(`❌ Cleanup failed: ${err.response?.data?.error || err.message}`);
+      })
+      .finally(() => setBusy(false));
+  };
+
+  const handleDownloadPdf = async () => {
+    setActionStatus('📄 Generating PDF Audit Report...');
+    try {
+      const response = await axios.get(DOWNLOAD_PDF_URL, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'Dark_Data_Audit_Report.pdf');
+      document.body.appendChild(link);
+      link.click();
+      
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      setActionStatus('✅ PDF Audit Report downloaded successfully!');
+    } catch (err) {
+      console.error('PDF Download failed:', err);
+      setActionStatus('❌ PDF Download failed. Check console for details.');
+    }
+  };
+
   const handlePrivacyToggle = () => {
     const newValue = !privacyMode;
     setPrivacyMode(newValue);
@@ -252,10 +360,15 @@ function App() {
       <div className="dataset-controls-row">
         <button className="btn btn-primary" onClick={handleGenerate} disabled={busy}>🔄 Generate Sample Dataset</button>
         <button className="btn btn-secondary" onClick={handleUploadClick} disabled={busy}>📁 Upload Files (any type)</button>
-        <button className="btn btn-tertiary" onClick={handleRetrain} disabled={busy}>🧠 Retrain Model on Current Dataset</button>
-        <button className="btn btn-scan" onClick={handleFolderScanClick} disabled={busy}>📂 Scan Real Files / Folder</button>
-        <button className="btn btn-migrate" onClick={handleMigrate} disabled={busy}>🗄️ Migrate Flagged Files to Cold Storage</button>
-        <button className="btn btn-aws" onClick={handleAwsConnect} disabled={busy}>☁️ Connect to AWS S3 Bucket</button>
+        <button className="btn btn-tertiary" onClick={handleRetrain} disabled={busy}>🧠 Retrain Model</button>
+        <button className="btn btn-scan" onClick={handleFolderScanClick} disabled={busy}>📂 Scan Folder</button>
+        <button className="btn btn-scan" onClick={handleScanLocalPath} disabled={busy}>🖥️ Scan Drive / Path</button>
+        <button className="btn btn-gdrive" onClick={handleScanGDrive} disabled={busy}>☁️ Scan Google Drive</button>
+        <button className="btn btn-migrate" onClick={handleMigrate} disabled={busy}>🗄️ Migrate to Cold Storage</button>
+        <button className="btn btn-aws" onClick={handleAwsConnect} disabled={busy}>☁️ Connect AWS S3</button>
+        <button className="btn btn-danger" onClick={handleAutomatedCleanup} disabled={busy}>🧹 Run Automated Cleanup</button>
+        <button className="btn btn-pdf" onClick={handleDownloadPdf} disabled={busy}>📄 Download PDF Report</button>
+
         <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} multiple />
         <input type="file" ref={folderInputRef} onChange={handleFolderScanChange} style={{ display: 'none' }} multiple />
       </div>
@@ -264,7 +377,7 @@ function App() {
         🔒 Privacy Mode (anonymize file IDs)
       </label>
       {actionStatus && <p className="dataset-status">{actionStatus}</p>}
-      <p className="dataset-hint">"Upload Files" accepts any regular files (photos, docs, folders).</p>
+      <p className="dataset-hint">"Upload Files" supports any file format (Images, PDFs, Videos, ZIP, Docs, Folders).</p>
     </section>
   );
 
@@ -363,6 +476,7 @@ function App() {
             <div className="status-message">Loading dashboard data...</div>
           </>
         )}
+        <div className="copyright-watermark">© 2026 Geeth Dasanayake</div>
       </div>
     );
   }
@@ -381,6 +495,7 @@ function App() {
             <div className="status-message error">{error}</div>
           </>
         )}
+        <div className="copyright-watermark">© 2026 Geeth Dasanayake</div>
       </div>
     );
   }
@@ -463,7 +578,7 @@ function App() {
           </section>
 
           <section className="table-section">
-            <h2>File Details</h2>
+            <h2>File Details ({files.length} records)</h2>
             <div className="table-wrapper">
               <table>
                 <thead>
@@ -503,6 +618,7 @@ function App() {
           </section>
         </>
       )}
+      <div className="copyright-watermark">© 2026 Geeth Dasanayake</div>
     </div>
   );
 }

@@ -5,6 +5,8 @@ numpy
 scikit-learn
 requests
 boto3
+codecarbon
 python-dotenv
 gunicorn
 flask-cors
+reportlab
