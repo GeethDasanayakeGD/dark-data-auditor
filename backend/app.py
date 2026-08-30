@@ -457,13 +457,13 @@ def download_pdf_report_endpoint():
 
     try:
         metrics = calculate_dashboard_metrics(global_dataset)
-        pdf_buffer = generate_pdf_report(metrics['aggregates'], metrics['files'])
+        pdf_path = os.path.join(os.getcwd(), "Dark_Data_Audit_Report.pdf")
         
-        # Buffer pointer එක මුලට සකස් කිරීම
-        pdf_buffer.seek(0)
+        # positional arguments 3ම (aggregates, files, output_path) ලබාදී call කිරීම
+        generate_pdf_report(metrics['aggregates'], metrics['files'], pdf_path)
 
         return send_file(
-            pdf_buffer,
+            pdf_path,
             mimetype='application/pdf',
             as_attachment=True,
             download_name='Dark_Data_Audit_Report.pdf'
