@@ -51,12 +51,7 @@ Over **80% of enterprise data** is "Dark Data"—unstructured, unmanaged, or unu
 | **Cloud & Integrations** | AWS S3 SDK (Boto3 concept), Google Drive API Connectors |
 | **Reporting** | ReportLab (PDF Generation) |
 
----
 
-## 📂 Architecture Overview
-
-dark-data-auditor/├── backend/│   ├── app.py                # Core Flask API & PyInstaller Routing│   ├── pdf_generator.py      # PDF Report Engine (ReportLab)│   └── requirements.txt      # Python Dependencies├── frontend/│   ├── src/                  # React Application Components│   └── package.json          # Node Dependencies & Build Scripts└── README.md
----
 
 ## 🚀 Getting Started
 
@@ -71,6 +66,8 @@ dark-data-auditor/├── backend/│   ├── app.py                # Core
 ```bash
 git clone [https://github.com/GeethDasanayakeGD/dark-data-auditor.git](https://github.com/GeethDasanayakeGD/dark-data-auditor.git)
 cd dark-data-auditor
+
+
 2️⃣ Backend SetupBash# Navigate to backend folder
 cd backend
 
