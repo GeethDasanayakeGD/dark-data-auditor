@@ -62,7 +62,7 @@ Over **80% of enterprise data** is "Dark Data"—unstructured, unmanaged, or unu
 
 ---
 
-### 1️⃣ Clone the Repository
+1️⃣ Clone the Repository
 ```bash
 git clone [https://github.com/GeethDasanayakeGD/dark-data-auditor.git](https://github.com/GeethDasanayakeGD/dark-data-auditor.git)
 cd dark-data-auditor
@@ -81,7 +81,11 @@ pip install -r requirements.txt
 
 # Run Flask server
 python app.py
-Server starts on http://127.0.0.1:50003️⃣ Frontend SetupOpen a new terminal session:Bash# Navigate to frontend folder
+Server starts on http://127.0.0.1:5000
+
+
+3️⃣ Frontend Setup
+Open a new terminal session:Bash# Navigate to frontend folder
 cd frontend
 
 # Install Node modules
