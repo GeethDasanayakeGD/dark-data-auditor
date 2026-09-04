@@ -7,7 +7,10 @@ import {
 } from 'recharts';
 import './App.css';
 
-const BASE_URL = 'http://localhost:5000';
+// Dynamic Host Detection (Laptop එකෙන් 'localhost' ද, Phone එකෙන් Access කරන විට IP එකද ලබාගනී)
+const HOST_IP = window.location.hostname;
+const BASE_URL = `http://${HOST_IP}:5000`;
+
 const METRICS_URL = `${BASE_URL}/api/dashboard-metrics`;
 const GENERATE_URL = `${BASE_URL}/api/generate-dataset`;
 const UPLOAD_URL = `${BASE_URL}/api/upload-dataset`;
@@ -61,7 +64,7 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setError('Could not reach backend API. Ensure Localhost Flask Server is running.');
+        setError('Could not reach backend API. Ensure Flask Server is running and reachable.');
         setLoading(false);
       });
   };
