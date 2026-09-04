@@ -54,3 +54,46 @@ Over **80% of enterprise data** is "Dark Data"—unstructured, unmanaged, or unu
 ---
 
 ## 📂 Architecture Overview
+
+dark-data-auditor/├── backend/│   ├── app.py                # Core Flask API & PyInstaller Routing│   ├── pdf_generator.py      # PDF Report Engine (ReportLab)│   └── requirements.txt      # Python Dependencies├── frontend/│   ├── src/                  # React Application Components│   └── package.json          # Node Dependencies & Build Scripts└── README.md
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- **Node.js**: `v18.x` or higher
+- **Python**: `v3.11` or higher
+- **Git**: Installed on system
+
+---
+
+### 1️⃣ Clone the Repository
+```bash
+git clone [https://github.com/GeethDasanayakeGD/dark-data-auditor.git](https://github.com/GeethDasanayakeGD/dark-data-auditor.git)
+cd dark-data-auditor
+2️⃣ Backend SetupBash# Navigate to backend folder
+cd backend
+
+# Create a virtual environment (optional but recommended)
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run Flask server
+python app.py
+Server starts on http://127.0.0.1:50003️⃣ Frontend SetupOpen a new terminal session:Bash# Navigate to frontend folder
+cd frontend
+
+# Install Node modules
+npm install
+
+# Start React development server
+npm start
+App opens on http://localhost:3000📦 Building Standalone Application (.exe)To bundle the React build and Flask API into a standalone Windows Executable using PyInstaller:Build React Production Frontend:Bashcd frontend
+npm run build
+Bundle with PyInstaller:Bashcd ../backend
+pyinstaller --noconfirm --onedir --windowed --add-data "../frontend/build;build" app.py
+Run Executable:Find the standalone binary in backend/dist/app/app.exe.📈 Impact MetricsCost Optimization: Standard S3 pricing estimate (~$0.023/GB/month) mapped against dark storage footprint.Carbon Intensity Model: Evaluated at ~$0.315\ kg\ CO_2e$ per GB stored annually.👨‍💻 AuthorGeeth DasanayakeEngineering Undergraduate | Full Stack & DevOps/Cloud Intern💼 LinkedIn: Geeth Dasanayake🌐 GitHub: @GeethDasanayakeGD📜 LicenseThis project is licensed under the MIT License - see the LICENSE file for details.
