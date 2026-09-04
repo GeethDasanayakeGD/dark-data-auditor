@@ -93,4 +93,18 @@ App opens on http://localhost:3000📦 Building Standalone Application (.exe)To 
 npm run build
 Bundle with PyInstaller:Bashcd ../backend
 pyinstaller --noconfirm --onedir --windowed --add-data "../frontend/build;build" app.py
-Run Executable:Find the standalone binary in backend/dist/app/app.exe.📈 Impact MetricsCost Optimization: Standard S3 pricing estimate (~$0.023/GB/month) mapped against dark storage footprint.Carbon Intensity Model: Evaluated at ~$0.315\ kg\ CO_2e$ per GB stored annually.👨‍💻 AuthorGeeth DasanayakeEngineering Undergraduate | Full Stack & DevOps/Cloud Intern💼 LinkedIn: Geeth Dasanayake🌐 GitHub: @GeethDasanayakeGD📜 LicenseThis project is licensed under the MIT License - see the LICENSE file for details.
+
+Run Executable:Find the standalone binary in backend/dist/app/app.exe.
+
+📈 Impact Metrics
+Cost Optimization: Standard S3 pricing estimate (~$0.023/GB/month) mapped against dark storage footprint.
+Carbon Intensity Model: Evaluated at ~$0.315\ kg\ CO_2e$ per GB stored annually.
+
+👨‍💻 Author
+Geeth Dasanayake
+Engineering Undergraduate | Full Stack & DevOps/Cloud Intern
+💼 LinkedIn: Geeth Dasanayake
+🌐 GitHub: @GeethDasanayakeGD
+
+📜 License
+This project is licensed under the MIT License - see the LICENSE file for details.
